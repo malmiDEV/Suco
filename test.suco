@@ -1,0 +1,20 @@
+fn test(test: 32U) -> 32I {
+	let var: 32I = 0;
+	while (var < 10) {
+		test = var++;
+	}
+
+    let ret: 32I = 0;
+    if (var < 10) {
+        var = 0;
+    } 
+    elif (var < 0) {
+        test = 0;
+    }
+    else {
+        ret = test;
+    }
+
+    return test;
+}
+
