@@ -1,0 +1,62 @@
+#ifndef TOKEN_H
+#define TOKEN_H
+
+enum {
+   TOKEN_NONE,
+   TOKEN_WHITESPACE,
+   TOKEN_DEF,
+   TOKEN_LET,
+   TOKEN_WHILE,
+   TOKEN_FOR,
+   TOKEN_IF,
+   TOKEN_ELIF,
+   TOKEN_ELSE,
+   TOKEN_MATCH,
+   TOKEN_RETURN,
+   TOKEN_ID,
+   TOKEN_LPAREN,
+   TOKEN_RPAREN,
+   TOKEN_LBRACE,
+   TOKEN_RBRACE,
+   TOKEN_LARROW,
+   TOKEN_RARROW,
+   TOKEN_LARROW_EQ,
+   TOKEN_RARROW_EQ,
+   TOKEN_ARROW,
+   TOKEN_EQUAL_ARROW,
+   TOKEN_COLON,
+   TOKEN_EQUAL,
+   TOKEN_EQUAL_TO,
+   TOKEN_NOT_EQUAL,
+   TOKEN_SEMI,
+   TOKEN_COMMA,
+   TOKEN_PLUS,
+   TOKEN_INC,
+   TOKEN_MINUS,
+   TOKEN_DEC,
+   TOKEN_MULT,
+   TOKEN_BITAND,
+   TOKEN_NOT,
+   TOKEN_UINT0,
+   TOKEN_UINT64,
+   TOKEN_INT64,
+   TOKEN_INT32,
+   TOKEN_UINT32,
+   TOKEN_INT16,
+   TOKEN_UINT16,
+   TOKEN_INT8,
+   TOKEN_UINT8,
+   TOKEN_FLOAT64,
+   TOKEN_INTCONST,
+   TOKEN_FLOATCONST,
+} TokenKind;
+
+typedef struct {
+   char *name;
+   int type;
+} Token;
+
+Token get_token(char *name, int type);
+char *token_get_type_str(int type);
+
+#endif
