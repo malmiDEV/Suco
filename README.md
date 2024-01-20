@@ -1,2 +1,27 @@
 # Suco
 A Suco language. My programming language that i create for writing malmiOS
+
+Suco language generate raw 32bit binary,
+i'ts like use pure assembly.
+
+for example this code: 
+```
+defun main() -> u32 {
+  return 32;
+}
+```
+
+compiler generate something like this
+
+```asm
+main:
+  push ebp
+  mov ebp, esp
+  mov eax, 32
+  mov esp, ebp
+  pop ebp
+  ret
+```
+
+Suco language does not depend on any os like linux or mac.
+But it will change when malmiOS and my own binary format is completed.
