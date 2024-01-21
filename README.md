@@ -24,4 +24,4 @@ main:
 ```
 
 Suco language does not depend on any os like linux or mac.
-But it will change when malmiOS and my own binary format is completed.
+But it will change when malmiOS and my own binary format, linker is completed.
