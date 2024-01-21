@@ -6,7 +6,7 @@ it's like use pure assembly.
 
 for example this code: 
 ```
-defun main() -> u32 {
+defun main() -> i32 {
   return 32;
 }
 ```
@@ -17,7 +17,8 @@ compiler generate something like this
 main:
   push ebp
   mov ebp, esp
-  mov eax, 32
+  push dword 32
+  pop eax
   mov esp, ebp
   pop ebp
   ret
