@@ -2,7 +2,7 @@
 A Suco language. My programming language that i create for writing malmiOS
 
 Suco language generate raw 32bit binary,
-i'ts like use pure assembly.
+it's like use pure assembly.
 
 for example this code: 
 ```
