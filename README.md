@@ -27,4 +27,4 @@ Suco language does not depend on any os like linux or mac.
 
 It's mean language contain only few basic features like pointers, function, variables, loops, if else swtich-case statements and etc.
 
-But it will change when i implement my own binary format, linker in malmiOS.
+But it will change when i implement my own binary format and linker in malmiOS.
