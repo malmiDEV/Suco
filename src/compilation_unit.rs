@@ -36,13 +36,11 @@ pub fn compilation_unit(args: Vec<String>) {
         if nod.typ == Types::Function {
             match &nod.kind {
                 NodeKind::Function(name, typ, body)=> {
-                    let template = format!("{}:\
-                                            \n\tpush ebp\
-                                            \n\tmov ebp, esp\n",
-                                           name);
-                    asm.push_str(template.as_str());
+                    asm.push_str(format!("{}:\n",name).as_str());
                     match &body.kind {
                         NodeKind::Scope(a) => {
+                            asm.push_str("\tpush ebp\
+                                        \n\tmov ebp, esp\n");
                             for i in 0..a.len() {
                                 match &a[i].kind {
                                     NodeKind::Return(a) => match a.kind {
