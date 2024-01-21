@@ -214,14 +214,11 @@ impl<'a> Lexer<'a> {
                   _ => TokenKind::None,
                };
                self.pos += 1;
-               // println!("{:?} {:?}", kind,span);
-               // exit(-1);
             }
          } else{
             eprintln!("Token Not Exist");
             exit(-1);
          }
-         // exit(-1);
          Some(Token::new(kind, span))
       } else {
          None

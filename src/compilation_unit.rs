@@ -1,13 +1,14 @@
 use std::fs::File;
 use std::io::{Read, Write};
+use std::process;
 use std::process::Command;
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::parser::{Parser, Types, NodeKind};
+use crate::parser::{Parser, Types, NodeKind, IntType};
 
 pub fn compilation_unit(args: Vec<String>) {
-    let file = &args[1];
+    let file_name = &args[1];
     let output = &args[2];
-    let mut file = File::open(file).unwrap();
+    let mut file = File::open(file_name).unwrap();
     let mut buffer = String::new();
     file.read_to_string(&mut buffer).expect("file cannot open");
 
@@ -34,10 +35,11 @@ pub fn compilation_unit(args: Vec<String>) {
         };
         if nod.typ == Types::Function {
             match &nod.kind {
-                NodeKind::Function {
-                    name, typ, body
-                } => {
-                    let template = format!("{}:\n\tpush ebp\n\tmov ebp, esp\n", name);
+                NodeKind::Function(name, typ, body)=> {
+                    let template = format!("{}:\
+                                            \n\tpush ebp\
+                                            \n\tmov ebp, esp\n",
+                                           name);
                     asm.push_str(template.as_str());
                     match &body.kind {
                         NodeKind::Scope(a) => {
@@ -45,7 +47,27 @@ pub fn compilation_unit(args: Vec<String>) {
                                 match &a[i].kind {
                                     NodeKind::Return(a) => match a.kind {
                                         NodeKind::Number(n) => {
-                                            let template = format!("\tmov eax, {}\n", n);
+                                            let size = match &a.typ {
+                                                Types::Int(a) => match a {
+                                                    IntType::Int8 => {
+                                                        "byte"
+                                                    },
+                                                    IntType::Int16 => {
+                                                        "word"
+                                                    }
+                                                    IntType::Int32 => {
+                                                        "dword"
+                                                    }
+                                                    IntType::Int64 => {
+                                                        "qword"
+                                                    }
+                                                    _ => ""
+                                                }
+                                                _ => todo!()
+                                            };
+                                            let template = format!("\tpush {} {}\
+                                                                  \n\tpop eax\n",
+                                                                   size, n);
                                             asm.push_str(template.as_str())
                                         },
                                         _ => todo!()
@@ -59,7 +81,9 @@ pub fn compilation_unit(args: Vec<String>) {
                 },
                 _ => {}
             };
-            asm.push_str("\tmov esp, ebp\n\tpop ebp\n\tret")
+            asm.push_str("\tmov esp, ebp\
+                        \n\tpop ebp\
+                        \n\tret")
         } else {
             panic!();
         }
@@ -72,8 +96,9 @@ pub fn compilation_unit(args: Vec<String>) {
         }
     };
     match file.write_all(asm.as_bytes()) {
-        Ok(_) => println!("Data has been successfully saved to the file."),
-        Err(err) => eprintln!("Error writing to file: {}", err),
+        Ok(_) => println!("Compiled to :: Path({}) as :: Output({})\n{} Byte => {}\n",
+                          file_name, output, file_name, buffer.len()),
+        Err(err) => eprintln!("Error writing to asm file: {}", err),
     }
     Command::new("nasm")
         .arg("main.asm")

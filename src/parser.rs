@@ -63,11 +63,7 @@ pub enum NodeKind {
     String(usize),
     Identifier(String),
     Scope(Vec<Node>),
-    Function{
-        name:String,
-        typ:IntType,
-        body:Box<Node>
-    },
+    Function(String, IntType, Box<Node>),
     Return(Box<Node>)
 }
 
@@ -85,10 +81,10 @@ impl Node {
         }
     }
 
-    fn new_int(val: i64) -> Self {
+    fn new_int(val: i64, typ: IntType) -> Self {
         Self {
             kind: NodeKind::Number(val),
-            typ: Types::Int(IntType::Int32)
+            typ: Types::Int(typ)
         }
     }
 
@@ -116,11 +112,7 @@ impl Node {
     fn new_function(name: &String, typ: IntType, block: Self) -> Self  {
         let name = name.to_string();
         Self {
-            kind: NodeKind::Function {
-                name,
-                typ,
-                body: Box::new(block)
-            },
+            kind: NodeKind::Function(name, typ, Box::new(block)),
             typ: Types::Function
         }
     }
@@ -157,7 +149,7 @@ impl<'a> Parser<'a> {
         let identifier = self.parse_identifier()?;
         let parameter = self.parse_params()?;
         let fn_type = self.parse_fn_type()?;
-        let fn_body = self.parse_scope()?;
+        let fn_body = self.parse_scope(&fn_type.typ)?;
 
         let name = match identifier.kind {
             NodeKind::Identifier(a) => a,
@@ -172,8 +164,8 @@ impl<'a> Parser<'a> {
         Ok(Node::new_function(&name, typ, fn_body))
     }
 
-    pub fn parse_return(&mut self) -> Result<Node, String> {
-        let expr = self.parse_expr()?;
+    pub fn parse_return(&mut self, typ: &Types) -> Result<Node, String> {
+        let expr = self.parse_expr(typ)?;
         let _ = self.consume_semi()?;
         Ok(Node::new_return(expr))
     }
@@ -245,7 +237,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_scope(&mut self) -> Result<Node, String> {
+    pub fn parse_scope(&mut self, typ: &Types) -> Result<Node, String> {
         self.pos += 1;
         let mut statements = Vec::new();
         match self.tokens.get(self.pos) {
@@ -253,7 +245,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 let r = if let Some(b) = self.tokens.get(self.pos) {
                     match b.kind {
-                        TokenKind::Return => statements.push(self.parse_return()?),
+                        TokenKind::Return => statements.push(self.parse_return(typ)?),
                         _ => panic!("Unexpected Token {}", b.span)
                     }
                 } else {
@@ -266,13 +258,16 @@ impl<'a> Parser<'a> {
         Ok(Node::new_scope(statements))
     }
 
-    pub fn parse_expr(&mut self) -> Result<Node, String> {
+    pub fn parse_expr(&mut self, typ: &Types) -> Result<Node, String> {
         self.pos += 1;
         if let Some(x) = self.tokens.get(self.pos) {
             match x {
                 Token { kind: TokenKind::Int, .. } => {
                     match x.span.parse() {
-                        Ok(n) => Ok(Node::new_int(n)),
+                        Ok(n) => Ok(Node::new_int(n, match typ {
+                            Types::Int(i) => i.clone(),
+                            _ => todo!()
+                        })),
                         Err(_) => Err(format!("{}", "Missing Expr".to_string()))
                     }
                 },
