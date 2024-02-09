@@ -1,7 +1,7 @@
 # Suco
 A Suco language. My programming language that i create for writing malmiOS
 
-Suco language generate raw 32bit binary, like freestanding c project.
+Suco language generate raw 32bit binary, like i686-freestanding c project.
 
 for example this code: 
 ```
