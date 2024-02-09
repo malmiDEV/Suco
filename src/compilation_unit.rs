@@ -1,9 +1,9 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::process;
-use std::process::Command;
+use std::process::{Command, exit};
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::parser::{Parser, Types, NodeKind, IntType};
+use crate::parser::{Parser, Types, NodeKind, IntType, Node};
 
 pub fn compilation_unit(args: Vec<String>) {
     let file_name = &args[1];
@@ -28,14 +28,13 @@ pub fn compilation_unit(args: Vec<String>) {
     let mut parse = Parser::new(&tokens);
     let node = parse.parsing_unit();
     let mut asm = String::new();
+
     for i in 0..node.len() {
-        let nod = match &node[i] {
-            Ok(a) => a,
-            Err(e) => panic!("{:?}",e)
-        };
+        let nod = &node[i];
         if nod.typ == Types::Function {
             match &nod.kind {
-                NodeKind::Function(name, typ, body)=> {
+                NodeKind::Function(name, typ, param, body) => {
+                    println!("{:?}", param);
                     asm.push_str(format!("{}:\n",name).as_str());
                     match &body.kind {
                         NodeKind::Scope(a) => {
@@ -45,27 +44,65 @@ pub fn compilation_unit(args: Vec<String>) {
                                 match &a[i].kind {
                                     NodeKind::Return(a) => match a.kind {
                                         NodeKind::Number(n) => {
-                                            let size = match &a.typ {
-                                                Types::Int(a) => match a {
-                                                    IntType::Int8 => {
-                                                        "byte"
+                                            let mut reg = String::new();
+                                            let verified = match typ {
+                                                IntType::Int8   => match n {
+                                                    -0x80..=0x7f => {
+                                                        reg.push_str("al");
+                                                        n
                                                     },
-                                                    IntType::Int16 => {
-                                                        "word"
-                                                    }
-                                                    IntType::Int32 => {
-                                                        "dword"
-                                                    }
-                                                    IntType::Int64 => {
-                                                        "qword"
-                                                    }
-                                                    _ => ""
+                                                    _ => panic!("Value Not Fit into i8 . {} but range is -128 .. 127", n)
                                                 }
-                                                _ => todo!()
+                                                IntType::Uint8  => match n {
+                                                    0x00..=0xff => {
+                                                        reg.push_str("al");
+                                                        n
+                                                    }
+                                                    _ => panic!("Value Not Fit into u8 . {} but range is 0 .. 255", n)
+                                                },
+                                                IntType::Int16  => match n {
+                                                    -0x8000..=0x7fff => {
+                                                        reg.push_str("ax");
+                                                        n
+                                                    }
+                                                    _ => panic!("Value Not Fit into i16. {} but range is -32,768 .. 32,767", n)
+                                                },
+                                                IntType::Uint16 => match n {
+                                                    0x0000..=0xffff => {
+                                                        reg.push_str("ax");
+                                                        n
+                                                    }
+                                                    _ => panic!("Value Not Fit into u16. {} but range is 0 .. 65,535", n)
+                                                },
+                                                IntType::Int32  => match n {
+                                                    -0x80000000..=0x7fffffff => {
+                                                        reg.push_str("eax");
+                                                        n
+                                                    }
+                                                    _ => panic!("Value Not Fit into i32. {} but range is -2,147,483,648 .. 2,147,483,647", n)
+                                                },
+                                                IntType::Uint32 => match n {
+                                                    0x00000000..=0xffffffff => {
+                                                        reg.push_str("eax");
+                                                        n
+                                                    }
+                                                    _ => panic!("Value Not Fit Into u32. {} but range is 0 .. 2,147,483,647", n)
+                                                },
+                                                _ => panic!("Not Supported Type: {:?}", typ)
                                             };
-                                            let template = format!("\tpush {} {}\
-                                                                  \n\tpop eax\n",
-                                                                   size, n);
+                                            // let size = match &a.typ {
+                                            //     Types::Int(a) => match a {
+                                            //         IntType::Int8 => "byte",
+                                            //         IntType::Uint8 => "word",
+                                            //         IntType::Int16 => "word",
+                                            //         IntType::Uint16 => "word",
+                                            //         IntType::Int32 => "dword",
+                                            //         IntType::Int64 => "qword",
+                                            //         _ => ""
+                                            //     }
+                                            //     _ => todo!()
+                                            // };
+                                            let template = format!("\tmov {}, {}\n",reg, verified);
                                             asm.push_str(template.as_str())
                                         },
                                         _ => todo!()

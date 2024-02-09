@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::process::exit;
 use crate::lexer::{Token, TokenKind};
@@ -47,13 +48,6 @@ impl Types {
     }
 }
 
-pub struct Variables {
-
-}
-
-impl Variables {
-
-}
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum NodeKind {
@@ -62,8 +56,9 @@ pub enum NodeKind {
     Number(i64),
     String(usize),
     Identifier(String),
+    Variable(Vec<HashMap<String, IntType>>),
     Scope(Vec<Node>),
-    Function(String, IntType, Box<Node>),
+    Function(String, IntType, Box<Node>, Box<Node>),
     Return(Box<Node>)
 }
 
@@ -102,6 +97,13 @@ impl Node {
         }
     }
 
+    fn new_params(args: Vec<HashMap<String, IntType>>) -> Self {
+        Self {
+            kind: NodeKind::Variable(args),
+            typ: Types::Int(IntType::Uint0)
+        }
+    }
+
     fn new_scope(statements: Vec<Node>) -> Self {
         Self {
             kind: NodeKind::Scope(statements),
@@ -109,10 +111,10 @@ impl Node {
         }
     }
 
-    fn new_function(name: &String, typ: IntType, block: Self) -> Self  {
+    fn new_function(name: &String, typ: IntType, param: Self, block: Self) -> Self  {
         let name = name.to_string();
         Self {
-            kind: NodeKind::Function(name, typ, Box::new(block)),
+            kind: NodeKind::Function(name, typ, Box::new(param), Box::new(block)),
             typ: Types::Function
         }
     }
@@ -133,12 +135,25 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parsing_unit(&mut self) -> Vec<Result<Node, String>> {
+    pub fn parsing_unit(&mut self) -> Vec<Node> {
         let mut r = Vec::new();
+
         while let Some(token) = self.tokens.get(self.pos) {
-            match token.kind {
-                TokenKind::Defun => r.push(self.parse_func()),
-                _ => {}
+            let chr = token.span.chars().next();
+            if let Some(c) = chr {
+                if !c.is_ascii_punctuation() {
+                    let span = token.span.as_str();
+                    match span {
+                        "defun" => match self.parse_func() {
+                            Ok(d) => r.push(d),
+                            Err(e) => panic!("{:?}", e)
+                        },
+                        "\0" => {},
+                        _ => {
+                            panic!("Unexpected Keyword: {:?}", span);
+                        }
+                    }
+                }
             }
             self.pos += 1;
         }
@@ -161,7 +176,7 @@ impl<'a> Parser<'a> {
             _ => todo!()
         };
 
-        Ok(Node::new_function(&name, typ, fn_body))
+        Ok(Node::new_function(&name, typ, parameter, fn_body))
     }
 
     pub fn parse_return(&mut self, typ: &Types) -> Result<Node, String> {
@@ -193,16 +208,55 @@ impl<'a> Parser<'a> {
             if p.kind != TokenKind::Lparen  {
                 panic!("Expected ( but found::{}",p.span)
             }
+            self.pos += 1;
         }
-
-        self.pos += 1;
-        if let Some(p) = self.tokens.get(self.pos) {
-            if p.kind != TokenKind::Rparen {
-                panic!("Expected ) but found::{}", p.span)
+        let mut params = Vec::new();
+        while let Some(i) = self.tokens.get(self.pos) {
+            if i.kind == TokenKind::Rparen {break}
+            let mut name = String::new();
+            let mut typ = IntType::Uint0;
+            let mut hash: HashMap<String, IntType> = HashMap::new();
+            if i.kind == TokenKind::Identifier {
+                name.push_str(&i.span);
+                self.pos += 1;
+                if let Some(a) = self.tokens.get(self.pos) {
+                    if a.kind == TokenKind::Colon {
+                        self.pos += 1;
+                        if let Some(t) = self.tokens.get(self.pos) {
+                            typ = match t.span.as_str() {
+                                "i8" => IntType::Int8,
+                                "u8" => IntType::Uint8,
+                                "i16" => IntType::Int16,
+                                "u16" => IntType::Uint16,
+                                "i32" => IntType::Int32,
+                                "u32" => IntType::Uint32,
+                                _ => panic!("Type does not exist: {}", t.span)
+                            };
+                            self.pos += 1;
+                        }
+                    } else {
+                        panic!("Expected Type After Name {} _ <- expected (:) but found {}", i.span, a.span)
+                    }
+                    hash.insert(name, typ);
+                    params.push(hash.clone());
+                    if let Some(c) = self.tokens.get(self.pos) {
+                        if c.kind == TokenKind::Comma {
+                           self.pos += 1;
+                        } else {
+                           if c.kind == TokenKind::Rparen {
+                               println!("{:?}",hash);
+                               continue
+                           } else {
+                               panic!("Expected Next Parameter Or ',' Or ')' but found {}", c.span)
+                           }
+                        }
+                    }
+                }
+            } else {
+                panic!("Incorrect Parameter Name {}", i.span);
             }
         }
-
-        Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Uint0) })
+        Ok(Node::new_params(params))
     }
 
     pub fn parse_fn_type(&mut self) -> Result<Node, String> {
@@ -225,16 +279,12 @@ impl<'a> Parser<'a> {
                             _ => Err(panic!("Unexpected Type Token {}", a.span))
                         };
                         typ
-                    } else {
-                        Err(panic!("Nothing there"))
-                    };
+                    } else {Err("".to_string())};
                     ret
                 }
                 _ => Err(panic!("Unexpected Token {}", ar.span))
             }
-        } else {
-            Err(panic!("{}", "Missing Token".to_string()))
-        }
+        } else {Err("".to_string())}
     }
 
     pub fn parse_scope(&mut self, typ: &Types) -> Result<Node, String> {
@@ -246,7 +296,7 @@ impl<'a> Parser<'a> {
                 let r = if let Some(b) = self.tokens.get(self.pos) {
                     match b.kind {
                         TokenKind::Return => statements.push(self.parse_return(typ)?),
-                        _ => panic!("Unexpected Token {}", b.span)
+                        _ => panic!("Unexpected Token {:?}", b.span)
                     }
                 } else {
                     panic!("There should be a statement")
