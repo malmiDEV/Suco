@@ -21,6 +21,7 @@ pub enum TokenKind {
 
    // ketwords
    Defun,
+   Let,
    Return,
 
    // separators
@@ -29,6 +30,8 @@ pub enum TokenKind {
    Lparen,
    Rparen,
    Arrow,
+   Equal,
+   Same,
    Colon,
    Comma,
    Semi,
@@ -59,12 +62,15 @@ impl Display for TokenKind {
          TokenKind::Int64 => write!(f, "Int64"),
          TokenKind::Uint64 => write!(f, "Uint64"),
          TokenKind::Defun => write!(f, "Defun"),
+         TokenKind::Let => write!(f, "Let"),
          TokenKind::Return => write!(f, "Return"),
          TokenKind::Lbrace => write!(f, "Lbrace"),
          TokenKind::Rbrace => write!(f, "Rbrace"),
          TokenKind::Lparen => write!(f, "Lparen"),
          TokenKind::Rparen => write!(f, "Rparen"),
          TokenKind::Arrow => write!(f, "Arrow"),
+         TokenKind::Equal => write!(f, "Equal"),
+         TokenKind::Same => write!(f, "Same"),
          TokenKind::Colon => write!(f, "Colon"),
          TokenKind::Comma => write!(f, "Comma"),
          TokenKind::Semi => write!(f, "Semi"),
@@ -146,6 +152,7 @@ impl<'a> Lexer<'a> {
             let input = buffer.as_str();
             kind = match input {
                "defun" => TokenKind::Defun,
+               "let" => TokenKind::Let,
                "return" => TokenKind::Return,
                "u0" => TokenKind::Uint0,
                "i8" => TokenKind::Int8,
@@ -160,10 +167,8 @@ impl<'a> Lexer<'a> {
             };
             span.push_str(buffer.as_str());
          } else if c.is_ascii_punctuation() {
-            let mut advance: String = String::new();
             if let Some(p) = self.lexer_peek_code() {
                if !p.is_ascii_punctuation() { panic!("Unexpected Token") }
-
                kind = match p {
                   '{' => {
                      span.push(p);
@@ -199,6 +204,23 @@ impl<'a> Lexer<'a> {
                         TokenKind::Minus
                      }
                   },
+                  '=' => {
+                     let mut kind = TokenKind::None;
+                     match self.lexer_peek_code_more() {
+                        Some(w) if !w.is_whitespace() => {
+                           if w == '=' {
+                              kind = TokenKind::Same;
+                              span.push_str("==");
+                           }
+                           kind
+                        }
+                        _ => {
+                           kind = TokenKind::Equal;
+                           span.push('=');
+                           kind
+                        }
+                     }
+                  }
                   ':' => {
                      span.push(p);
                      TokenKind::Colon

@@ -1,3 +1,22 @@
-defun main(a: i32, b: i32, result: u8, test: u16) -> i8 {
-   return 12;
-}    
+defun extra() -> i8 {
+    let test1: u32 = 23;
+    let test2: u32 = 23;
+    let test3: u32 = 23;
+    let test4: u32 = 23;
+    let test5: u32 = 23;
+    return 12;
+}
+
+defun extraFunctionThatReturnSomeValueAndCreateVariable() -> u16 {
+    let a1: i8 = 122;
+    let a2: i16 = 124;
+    let b3: i32 = 12;
+    let d4: i8 = 12;
+    let d5: i32 = 12;
+    return 6974;
+}
+
+defun main(param: u32) -> u32 {
+    let test: u32 = 12;
+    return 122;
+}

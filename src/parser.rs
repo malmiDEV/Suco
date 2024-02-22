@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::process::exit;
 use crate::lexer::{Token, TokenKind};
+use crate::parser::NodeKind::Param;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum IntType {
     Uint0,
     Int8,
@@ -33,7 +34,7 @@ impl IntType {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Types {
     Int(IntType),
     Function
@@ -48,18 +49,54 @@ impl Types {
     }
 }
 
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum NodeKind {
     Program,
     Annotation,
-    Number(i64),
+    NumberLit(i64),
     String(usize),
     Identifier(String),
-    Variable(Vec<HashMap<String, IntType>>),
+    Variable(Box<Variable>),
+    Param(Vec<Parameter>),
     Scope(Vec<Node>),
     Function(String, IntType, Box<Node>, Box<Node>),
     Return(Box<Node>)
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Parameter {
+    pub name: String,
+    pub types: IntType,
+    pub content: u32,
+}
+
+impl Parameter {
+    pub fn new(name: String, types: IntType, content: u32) -> Parameter {
+        Parameter {
+            name,
+            types,
+            content,
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Variable {
+    pub name: String,
+    pub types: IntType,
+    pub content: i64,
+    pub global: bool
+}
+
+impl Variable {
+    pub fn new(name: String, types: IntType, content: i64, global: bool) -> Variable {
+        Variable {
+            name,
+            types,
+            content,
+            global
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -78,7 +115,7 @@ impl Node {
 
     fn new_int(val: i64, typ: IntType) -> Self {
         Self {
-            kind: NodeKind::Number(val),
+            kind: NodeKind::NumberLit(val),
             typ: Types::Int(typ)
         }
     }
@@ -97,9 +134,16 @@ impl Node {
         }
     }
 
-    fn new_params(args: Vec<HashMap<String, IntType>>) -> Self {
+    fn new_variable(args: Variable) -> Self {
         Self {
-            kind: NodeKind::Variable(args),
+            kind: NodeKind::Variable(Box::new(args)),
+            typ: Types::Int(IntType::Uint0)
+        }
+    }
+
+    fn new_params(args: Vec<Parameter>) -> Self {
+        Self {
+            kind: NodeKind::Param(args),
             typ: Types::Int(IntType::Uint0)
         }
     }
@@ -120,7 +164,7 @@ impl Node {
     }
 }
 
-type ParseResult<T> = Result<T, ()>;
+type ParseResult<T> = Result<T, String>;
 
 pub struct Parser<'a> {
     tokens: &'a Vec<Token>,
@@ -160,11 +204,11 @@ impl<'a> Parser<'a> {
         r
     }
 
-    pub fn parse_func(&mut self) -> Result<Node, String> {
+    pub fn parse_func(&mut self) -> ParseResult<Node> {
         let identifier = self.parse_identifier()?;
         let parameter = self.parse_params()?;
         let fn_type = self.parse_fn_type()?;
-        let fn_body = self.parse_scope(&fn_type.typ)?;
+        let fn_body = self.parse_scope(fn_type.typ.clone())?;
 
         let name = match identifier.kind {
             NodeKind::Identifier(a) => a,
@@ -179,13 +223,13 @@ impl<'a> Parser<'a> {
         Ok(Node::new_function(&name, typ, parameter, fn_body))
     }
 
-    pub fn parse_return(&mut self, typ: &Types) -> Result<Node, String> {
+    pub fn parse_return(&mut self, typ: Types) -> ParseResult<Node> {
         let expr = self.parse_expr(typ)?;
         let _ = self.consume_semi()?;
         Ok(Node::new_return(expr))
     }
 
-    pub fn parse_identifier(&mut self) -> Result<Node, String> {
+    pub fn parse_identifier(&mut self) -> ParseResult<Node> {
         self.pos += 1;
         if let Some(x) = self.tokens.get(self.pos) {
             match x {
@@ -202,70 +246,108 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_params(&mut self) -> Result<Node, String> {
+    pub fn parse_params(&mut self) -> ParseResult<Node> {
         self.pos += 1;
         if let Some(p) = self.tokens.get(self.pos) {
-            if p.kind != TokenKind::Lparen  {
-                panic!("Expected ( but found::{}",p.span)
+            if p.kind != TokenKind::Lparen {
+                return Err(format!("Expected ( but found::{}", p.span))
             }
             self.pos += 1;
         }
-        let mut params = Vec::new();
+        let mut params: Vec<Parameter> = Vec::new();
         while let Some(i) = self.tokens.get(self.pos) {
-            if i.kind == TokenKind::Rparen {break}
-            let mut name = String::new();
-            let mut typ = IntType::Uint0;
-            let mut hash: HashMap<String, IntType> = HashMap::new();
-            if i.kind == TokenKind::Identifier {
-                name.push_str(&i.span);
-                self.pos += 1;
-                if let Some(a) = self.tokens.get(self.pos) {
-                    if a.kind == TokenKind::Colon {
-                        self.pos += 1;
-                        if let Some(t) = self.tokens.get(self.pos) {
-                            typ = match t.span.as_str() {
-                                "i8" => IntType::Int8,
-                                "u8" => IntType::Uint8,
-                                "i16" => IntType::Int16,
-                                "u16" => IntType::Uint16,
-                                "i32" => IntType::Int32,
-                                "u32" => IntType::Uint32,
-                                _ => panic!("Type does not exist: {}", t.span)
-                            };
+            match i.kind {
+                TokenKind::Rparen => break,
+                TokenKind::Comma => {},
+                TokenKind::Identifier => {
+                    let mut name = String::new();
+                    name.push_str(i.span.as_str());
+                    self.pos += 1;
+                    if let Some(colon) = self.tokens.get(self.pos) {
+                        if colon.kind == TokenKind::Colon {
                             self.pos += 1;
-                        }
-                    } else {
-                        panic!("Expected Type After Name {} _ <- expected (:) but found {}", i.span, a.span)
-                    }
-                    hash.insert(name, typ);
-                    params.push(hash.clone());
-                    if let Some(c) = self.tokens.get(self.pos) {
-                        if c.kind == TokenKind::Comma {
-                           self.pos += 1;
+                            if let Some(t) = self.tokens.get(self.pos) {
+                                params.push(Parameter::new(name, match t.kind {
+                                    TokenKind::Uint8 => IntType::Uint8,
+                                    TokenKind::Int8 => IntType::Int8,
+                                    TokenKind::Uint16 => IntType::Uint16,
+                                    TokenKind::Int16 => IntType::Int16,
+                                    TokenKind::Uint32 => IntType::Uint32,
+                                    TokenKind::Int32 => IntType::Int32,
+                                    _ => return Err(format!("Type Not Exist Error AT Token: {} Number: {}", t.span, self.pos))
+                                }, 0))
+                            }
                         } else {
-                           if c.kind == TokenKind::Rparen {
-                               println!("{:?}",hash);
-                               continue
-                           } else {
-                               panic!("Expected Next Parameter Or ',' Or ')' but found {}", c.span)
-                           }
+                            return Err(format!("Unexpected Token AT Token After: {} Number: {} expected :", i.span, self.pos))
                         }
                     }
-                }
-            } else {
-                panic!("Incorrect Parameter Name {}", i.span);
+                },
+                _ => return Err(format!("Unexpected Token AT Token: {} Number: {}", i.span, self.pos))
             }
+            self.pos += 1;
         }
         Ok(Node::new_params(params))
     }
 
-    pub fn parse_fn_type(&mut self) -> Result<Node, String> {
+    pub fn parse_variable(&mut self) -> ParseResult<Node> {
+        self.pos += 1;
+        let mut name = String::new();
+        let mut tp = IntType::Int32;
+        let mut expr = Node::new_int(0, IntType::Int32);
+        if let Some(id) = self.tokens.get(self.pos) {
+            match id.kind {
+                TokenKind::Identifier => {
+                    self.pos += 1;
+                    name.push_str(id.span.as_str());
+                    if let Some(t) = self.tokens.get(self.pos) {
+                        if t.kind == TokenKind::Colon {
+                            self.pos += 1;
+                            if let Some(kind) = self.tokens.get(self.pos) {
+                                tp = match kind {
+                                    Token { kind: TokenKind::Int8, .. } => IntType::Int8,
+                                    Token { kind: TokenKind::Uint8, .. } => IntType::Uint8,
+                                    Token { kind: TokenKind::Int16, .. } => IntType::Int16,
+                                    Token { kind: TokenKind::Uint16, .. } => IntType::Uint16,
+                                    Token { kind: TokenKind::Int32, .. } => IntType::Int32,
+                                    Token { kind: TokenKind::Uint32, .. } => IntType::Uint32,
+                                    Token { kind: TokenKind::Int64, .. } => IntType::Int64,
+                                    Token { kind: TokenKind::Uint64, .. } => IntType::Uint64,
+                                    _ => return Err(format!("{} Type Not Exist Error AT Token {}", kind.span, self.pos))
+                                };
+                            }
+                            self.pos += 1;
+                            if let Some(e) = self.tokens.get(self.pos) {
+                                if e.kind == TokenKind::Equal {
+                                    expr = self.parse_expr(Types::Int(tp))?;
+                                } else {
+                                    return Err(format!("Expected = but found {} Error AT Token {}", e.span, self.pos))
+                                }
+                            }
+                            let _ = self.consume_semi()?;
+                        } else {
+                            return Err(format!("Expected : AT Token: {} But Found {}", self.pos, t.span))
+                        }
+                    } else {
+                        return Err(format!("Put Some Type Annotation after variable identifier AT Token: {}", id.span))
+                    }
+                }
+                _ => return Err(format!("Expected Name After let Keyword AT Token: {} but Found {}", self.pos, id.span))
+            }
+        }
+        let number = match expr.kind {
+            NodeKind::NumberLit(n) => n,
+            _ => 0
+        };
+        Ok(Node::new_variable(Variable::new(name, tp, number, false)))
+    }
+
+    pub fn parse_fn_type(&mut self) -> ParseResult<Node> {
         self.pos += 1;
         if let Some(ar) = self.tokens.get(self.pos) {
             match ar {
                 Token { kind: TokenKind::Arrow, .. } => {
                     self.pos += 1;
-                    let mut ret = if let Some(a) = self.tokens.get(self.pos) {
+                    let ret = if let Some(a) = self.tokens.get(self.pos) {
                         let typ = match a {
                             Token { kind: TokenKind::Int8, .. } => Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Int8) }),
                             Token { kind: TokenKind::Uint8, .. } => Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Uint8) }),
@@ -276,46 +358,51 @@ impl<'a> Parser<'a> {
                             Token { kind: TokenKind::Int64, .. } => Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Int64) }),
                             Token { kind: TokenKind::Uint64, .. } => Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Uint64) }),
                             Token { kind: TokenKind::Uint0, .. } => Ok(Node { kind: NodeKind::Annotation, typ: Types::Int(IntType::Uint0) }),
-                            _ => Err(panic!("Unexpected Type Token {}", a.span))
+                            _ => return Err(format!("Unexpected Type Token {}", a.span))
                         };
                         typ
                     } else {Err("".to_string())};
                     ret
                 }
-                _ => Err(panic!("Unexpected Token {}", ar.span))
+                _ => return Err(format!("Unexpected Token {}", ar.span))
             }
         } else {Err("".to_string())}
     }
 
-    pub fn parse_scope(&mut self, typ: &Types) -> Result<Node, String> {
+    pub fn parse_scope(&mut self, typ: Types) -> ParseResult<Node> {
         self.pos += 1;
         let mut statements = Vec::new();
         match self.tokens.get(self.pos) {
             Some(x) if x.kind == TokenKind::Lbrace => {
                 self.pos += 1;
-                let r = if let Some(b) = self.tokens.get(self.pos) {
-                    match b.kind {
-                        TokenKind::Return => statements.push(self.parse_return(typ)?),
-                        _ => panic!("Unexpected Token {:?}", b.span)
+                while let Some(stat) = self.tokens.get(self.pos) {
+                    if stat.kind == TokenKind::Rbrace {break}
+                    match stat.kind {
+                        TokenKind::Let => {
+                            statements.push(self.parse_variable()?);
+                            self.pos += 1;
+                        }
+                        TokenKind::Return => {
+                            statements.push(self.parse_return(typ)?);
+                            self.pos += 1;
+                        },
+                        _ => return Err(format!("Unexpected Token {:?} AT Token: {}", stat.span, self.pos))
                     }
-                } else {
-                    panic!("There should be a statement")
-                };
-                r
+                }
             }
-            _ => panic!("Scope is empty")
+            _ => return Err("Scope is empty".to_string())
         };
         Ok(Node::new_scope(statements))
     }
 
-    pub fn parse_expr(&mut self, typ: &Types) -> Result<Node, String> {
+    pub fn parse_expr(&mut self, typ: Types) -> ParseResult<Node> {
         self.pos += 1;
         if let Some(x) = self.tokens.get(self.pos) {
             match x {
                 Token { kind: TokenKind::Int, .. } => {
                     match x.span.parse() {
                         Ok(n) => Ok(Node::new_int(n, match typ {
-                            Types::Int(i) => i.clone(),
+                            Types::Int(i) => i,
                             _ => todo!()
                         })),
                         Err(_) => Err(format!("{}", "Missing Expr".to_string()))
@@ -331,8 +418,8 @@ impl<'a> Parser<'a> {
     pub fn consume_semi(&mut self) -> Result<(), String> {
         self.pos += 1;
         match self.tokens.get(self.pos) {
-            Some(cons) if cons.kind != TokenKind::Semi => Err(panic!("Expected ; but found::{}", cons.span)),
-            None => Err(panic!("Expected ; but there is nothing")),
+            Some(cons) if cons.kind != TokenKind::Semi => Err(format!("Expected ; but found {}", cons.span)),
+            None => Err("Expected ; but there is nothing".to_string()),
             _ => Ok(())
         }
     }
