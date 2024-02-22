@@ -1,5 +1,5 @@
 # Suco
-A Suco language. My programming language that i create for writing malmiOS
+Simple system programming language for x86 and malmiOS
 
 Suco compiler generate x86 assembly.
 
